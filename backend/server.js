@@ -10,7 +10,15 @@ const downloadRouter = require('./routes/download');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Security middleware
+// 1. CORS Configuration (Fix)
+// इसे Helmet से ऊपर रखना बेहतर है
+app.use(cors({
+    origin: '*', // Render पर टेस्टिंग के लिए सभी origins allow करें
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// 2. Security middleware (Updated CSP)
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -18,21 +26,21 @@ app.use(helmet({
             styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
             scriptSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'"]
+            // connectSrc में 'self' और अपना Render URL दोनों जोड़ें
+            connectSrc: ["'self'", "https://shorts-downloader-rhiy.onrender.com"]
         }
-    }
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" } // CORS के साथ बेहतर काम करने के लिए
 }));
 
-// CORS configuration
-app.use(cors()); // Allow all origins by default (Fixes Render CORS error)
 // Body parser
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rate limiting - prevent abuse
+// Rate limiting
 const limiter = rateLimit({
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 10, // limit each IP to 10 requests per windowMs
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 10,
     message: {
         error: 'Too many download requests. Please try again later.',
         retryAfter: '15 minutes'
@@ -41,56 +49,33 @@ const limiter = rateLimit({
     legacyHeaders: false,
 });
 
+// Routes
 app.use('/api/download', limiter);
-
-// Serve static files from frontend directory
 app.use(express.static(path.join(__dirname, '../frontend')));
-
-// API Routes
 app.use('/api/download', downloadRouter);
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime()
-    });
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Serve index.html for root route
+// Root route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// 404 handler
+// Error Handling
 app.use((req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
     console.error('Error:', err.message);
     res.status(err.status || 500).json({
-        error: err.message || 'Internal server error',
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+        error: err.message || 'Internal server error'
     });
 });
 
-// Start server
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔒 Rate limit: ${process.env.RATE_LIMIT_MAX_REQUESTS || 10} requests per ${(parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 900000) / 60000} minutes`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully...');
-    process.exit(0);
-});
-
-process.on('SIGINT', () => {
-    console.log('SIGINT received, shutting down gracefully...');
-    process.exit(0);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
