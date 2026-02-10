@@ -8,6 +8,7 @@ require('dotenv').config();
 const downloadRouter = require('./routes/download');
 
 const app = express();
+app.set('trust proxy', 1); // Trust Render proxy for rate limiting
 const PORT = process.env.PORT || 3000;
 
 // 1. CORS Configuration (Fix)
