@@ -41,12 +41,12 @@ function validateUrl(url, platform) {
         const urlObj = new URL(url);
 
         if (platform === 'youtube') {
-            // YouTube URL patterns
+            // More permissive YouTube URL patterns
+            // Supports: youtube.com, m.youtube.com, music.youtube.com, youtu.be
+            // Supports: /shorts/, /watch?v=, /v/, /embed/, etc.
             const youtubePatterns = [
-                /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/,
-                /^(https?:\/\/)?(www\.)?youtube\.com\/shorts\/.+$/,
-                /^(https?:\/\/)?(www\.)?youtube\.com\/watch\?v=.+$/,
-                /^(https?:\/\/)?youtu\.be\/.+$/
+                /^(https?:\/\/)?((www|m|music)\.)?youtube\.com\/.*$/i,
+                /^(https?:\/\/)?youtu\.be\/.*$/i
             ];
 
             return youtubePatterns.some(pattern => pattern.test(url));
@@ -55,8 +55,8 @@ function validateUrl(url, platform) {
         if (platform === 'instagram') {
             // Instagram URL patterns
             const instagramPatterns = [
-                /^(https?:\/\/)?(www\.)?instagram\.com\/(reel|reels|p)\/.+$/,
-                /^(https?:\/\/)?(www\.)?instagr\.am\/(reel|reels|p)\/.+$/
+                /^(https?:\/\/)?((www|m)\.)?instagram\.com\/.*$/i,
+                /^(https?:\/\/)?((www|m)\.)?instagr\.am\/.*$/i
             ];
 
             return instagramPatterns.some(pattern => pattern.test(url));
