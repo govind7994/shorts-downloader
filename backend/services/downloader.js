@@ -1,5 +1,14 @@
 const ytdl = require('@distube/ytdl-core');
 
+// Initialize YouTube agent
+let agent;
+try {
+    const cookies = process.env.YOUTUBE_COOKIES ? JSON.parse(process.env.YOUTUBE_COOKIES) : [];
+    agent = ytdl.createAgent(cookies);
+} catch (error) {
+    console.error('Error creating YouTube agent:', error);
+}
+
 /**
  * Get video information
  * @param {string} url - Video URL
@@ -9,7 +18,9 @@ const ytdl = require('@distube/ytdl-core');
 async function getVideoInfo(url, platform) {
     if (platform === 'youtube') {
         try {
-            const info = await ytdl.getInfo(url);
+            // Use agent if available
+            const options = agent ? { agent } : {};
+            const info = await ytdl.getInfo(url, options);
 
             return {
                 title: info.videoDetails.title,
@@ -19,7 +30,23 @@ async function getVideoInfo(url, platform) {
                 viewCount: info.videoDetails.viewCount
             };
         } catch (error) {
-            console.error('Error getting YouTube video info:', error);
+            console.error('Error getting YouTube video info:', error.message);
+
+            // Retry without agent if failed (fallback)
+            if (agent) {
+                try {
+                    const info = await ytdl.getInfo(url);
+                    return {
+                        title: info.videoDetails.title,
+                        duration: info.videoDetails.lengthSeconds,
+                        thumbnail: info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1]?.url,
+                        author: info.videoDetails.author.name,
+                        viewCount: info.videoDetails.viewCount
+                    };
+                } catch (retryError) {
+                    throw new Error('Video unavailable or private (Check cookies/IP)');
+                }
+            }
             throw new Error('Video unavailable or private');
         }
     } else if (platform === 'instagram') {
@@ -45,11 +72,14 @@ async function getVideoInfo(url, platform) {
 async function downloadVideo(url, platform, res, quality = 'highest') {
     if (platform === 'youtube') {
         try {
-            // Get video info first to validate
-            const info = await ytdl.getInfo(url);
+            // Get video info first to validate (using agent)
+            const options = agent ? { agent } : {};
+            const info = await ytdl.getInfo(url, options);
 
             // Filter for video+audio formats, prefer mp4
             let formats = ytdl.filterFormats(info.formats, 'videoandaudio');
+
+            // ... (rest of filtering logic same as before until streaming) ...
 
             if (formats.length === 0) {
                 throw new Error('No video formats found');
@@ -58,44 +88,39 @@ async function downloadVideo(url, platform, res, quality = 'highest') {
             // Filter by quality if specified
             let selectedFormat;
 
+            // Sort formats to find best match
+            const sortedFormats = formats
+                .filter(f => f.container === 'mp4' && f.hasVideo && f.hasAudio)
+                .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+
             if (quality === 'highest') {
-                // Find best quality mp4 format
-                selectedFormat = formats
-                    .filter(f => f.container === 'mp4')
-                    .sort((a, b) => b.bitrate - a.bitrate)[0] || formats[0];
+                selectedFormat = sortedFormats[0] || formats[0];
             } else {
-                // Try to find format matching requested quality
                 const requestedHeight = parseInt(quality);
-
                 // Find closest quality match
-                selectedFormat = formats
-                    .filter(f => f.container === 'mp4')
-                    .sort((a, b) => {
-                        const aDiff = Math.abs((a.height || 0) - requestedHeight);
-                        const bDiff = Math.abs((b.height || 0) - requestedHeight);
-                        return aDiff - bDiff;
-                    })[0];
+                selectedFormat = sortedFormats.reduce((prev, curr) => {
+                    return (Math.abs(curr.height - requestedHeight) < Math.abs(prev.height - requestedHeight) ? curr : prev);
+                });
+            }
 
-                // Fallback to highest if no match found
-                if (!selectedFormat) {
-                    selectedFormat = formats
-                        .filter(f => f.container === 'mp4')
-                        .sort((a, b) => b.bitrate - a.bitrate)[0] || formats[0];
-                }
+            if (!selectedFormat) {
+                selectedFormat = sortedFormats[0] || formats[0];
             }
 
             // Set proper filename
-            const sanitizedTitle = info.videoDetails.title
+            const sanitizedTitle = (info.videoDetails.title || 'video')
                 .replace(/[^a-z0-9]/gi, '_')
                 .substring(0, 50);
 
             res.setHeader('Content-Disposition', `attachment; filename="${sanitizedTitle}_${quality}.mp4"`);
 
-            // Stream video directly to response
-            const videoStream = ytdl(url, {
+            // Stream video directly to response using agent
+            const streamOptions = {
                 format: selectedFormat,
-                quality: quality === 'highest' ? 'highest' : selectedFormat.itag
-            });
+                agent: agent // Pass the agent here!
+            };
+
+            const videoStream = ytdl(url, streamOptions);
 
             // Handle stream errors
             videoStream.on('error', (error) => {
