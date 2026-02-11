@@ -11,27 +11,34 @@ const app = express();
 app.set('trust proxy', 1); // Trust Render proxy for rate limiting
 const PORT = process.env.PORT || 3000;
 
-// 1. CORS Configuration (Fix)
-// इसे Helmet से ऊपर रखना बेहतर है
+// 1. CORS Configuration (Enhanced for cross-region access)
+// Handle preflight requests explicitly
+app.options('*', cors());
+
+// CORS middleware with comprehensive settings
 app.use(cors({
-    origin: '*', // Render पर टेस्टिंग के लिए सभी origins allow करें
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: '*', // Allow all origins (safe for public API)
+    methods: ['GET', 'POST', 'OPTIONS', 'HEAD'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Range', 'Accept', 'Accept-Encoding'],
+    exposedHeaders: ['Content-Length', 'Content-Type', 'Content-Disposition', 'Content-Range'],
+    credentials: false, // Set to false when using origin: '*'
+    maxAge: 86400 // Cache preflight for 24 hours
 }));
 
-// 2. Security middleware (Updated CSP)
+// 2. Security middleware (Updated for cross-origin support)
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
             scriptSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", "data:", "https:"],
-            // connectSrc में 'self' और अपना Render URL दोनों जोड़ें
-            connectSrc: ["'self'", "https://shorts-downloader-rhiy.onrender.com"]
+            imgSrc: ["'self'", "data:", "https:", "blob:"],
+            mediaSrc: ["'self'", "blob:", "https:"],
+            connectSrc: ["'self'", "*"] // Allow connections from anywhere
         }
     },
-    crossOriginResourcePolicy: { policy: "cross-origin" } // CORS के साथ बेहतर काम करने के लिए
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false // Disable to allow cross-origin resources
 }));
 
 // Body parser

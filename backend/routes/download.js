@@ -93,7 +93,9 @@ router.post('/video', async (req, res) => {
             });
         }
 
-        // Set response headers for video download
+        // Set response headers for video download with CORS support
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type, Content-Disposition');
         res.setHeader('Content-Type', 'video/mp4');
         res.setHeader('Content-Disposition', 'attachment; filename="video.mp4"');
         res.setHeader('Cache-Control', 'no-cache');
