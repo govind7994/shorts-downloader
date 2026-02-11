@@ -32,9 +32,19 @@ async function getVideoInfo(url, platform) {
         } catch (error) {
             console.error('Error getting YouTube video info:', error.message);
 
+            // Check for specific YouTube errors
+            if (error.message.includes('Sign in to confirm')) {
+                throw new Error('YouTube bot detection triggered. Please add YouTube cookies to environment variables. See YOUTUBE_COOKIES_GUIDE.md');
+            }
+
+            if (error.message.includes('Video unavailable')) {
+                throw new Error('Video unavailable or private');
+            }
+
             // Retry without agent if failed (fallback)
             if (agent) {
                 try {
+                    console.log('Retrying without agent...');
                     const info = await ytdl.getInfo(url);
                     return {
                         title: info.videoDetails.title,
@@ -44,10 +54,15 @@ async function getVideoInfo(url, platform) {
                         viewCount: info.videoDetails.viewCount
                     };
                 } catch (retryError) {
+                    console.error('Retry failed:', retryError.message);
+                    if (retryError.message.includes('Sign in to confirm')) {
+                        throw new Error('YouTube requires authentication. Add YOUTUBE_COOKIES to environment variables.');
+                    }
                     throw new Error('Video unavailable or private (Check cookies/IP)');
                 }
             }
-            throw new Error('Video unavailable or private');
+
+            throw new Error('Failed to fetch video info. YouTube may be blocking requests.');
         }
     } else if (platform === 'instagram') {
         // Instagram Reels support would require additional libraries
